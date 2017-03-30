@@ -89,7 +89,11 @@ namespace ReferenceMagician
 				if (assembly == null) continue;
 				var outputFileName = Path.Combine(outputDirectory, Path.GetFileName(currentFile));
 				Console.WriteLine($"Copying {currentFile} to {outputFileName}...");
-				File.Copy(currentFile, outputFileName);
+				try {
+					File.Copy(currentFile, outputFileName);
+				} catch (IOException ex) when ((uint)ex.HResult == 0x80070050) {
+					Console.WriteLine($"WARNING: Skipping {Path.GetFileName(currentFile)}: File already exists!");
+				}
 				foreach (var reference in assembly.MainModule.AssemblyReferences) {
 					var file = ResolveReference(baseDirectory, reference, !includeGacAssemblies);
 					if (includeGacAssemblies && !includeBclAssemblies) {
