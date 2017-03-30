@@ -85,7 +85,7 @@ namespace ReferenceMagician
 
 			while (queue.Count > 0) {
 				var currentFile = queue.Dequeue();
-				var assembly = Load(currentFile);
+				var assembly = Load(ref currentFile);
 				if (assembly == null) continue;
 				var outputFileName = Path.Combine(outputDirectory, Path.GetFileName(currentFile));
 				Console.WriteLine($"Copying {currentFile} to {outputFileName}...");
@@ -133,15 +133,39 @@ namespace ReferenceMagician
 			return file;
 		}
 
-		static AssemblyDefinition Load(string fileName)
+		static AssemblyDefinition Load(ref string fileName)
 		{
+			if (string.IsNullOrWhiteSpace(fileName))
+				return null;
+			TryResolveAssemblyName(ref fileName);
 			if (string.IsNullOrWhiteSpace(fileName))
 				return null;
 			try {
 				return AssemblyDefinition.ReadAssembly(fileName);
 			} catch (Exception ex) {
-				Console.WriteLine($"{fileName}: " + ex.Message);
+				Console.WriteLine($"WARNING: Skipping {fileName}: " + ex.Message);
 				return null;
+			}
+		}
+
+		static void TryResolveAssemblyName(ref string fileName)
+		{
+			if (fileName.Contains('\\') ||
+				fileName.Contains('/') ||
+				fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+				fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+				return;
+			try {
+				var pattern = AssemblyNameReference.Parse(fileName);
+				var patternVersion = new Version(pattern.Version.Major, pattern.Version.Minor, pattern.Version.Build == -1 ? 0 : pattern.Version.Build, pattern.Version.Revision == -1 ? 0 : pattern.Version.Revision);
+				foreach (var name in GacInterop.GetGacAssemblyFullNames().Where(
+					n => string.Equals(n.Name, pattern.Name, StringComparison.OrdinalIgnoreCase)
+						&& (pattern.Version == null || n.Version.Equals(patternVersion)))
+				) {
+					fileName = GacInterop.FindAssemblyInNetGac(name) ?? fileName;
+				}
+			} catch (Exception ex) {
+				// ignore exceptions
 			}
 		}
 
